@@ -432,3 +432,80 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+#ifdef LAB_PGTBL
+/* print indentor for vmprint.
+ * for example:
+ * (level x) format: pte_index: pte PTE2PA(pte)
+ * 
+ * ..(level 2)
+ * .. ..(level 1)
+ * .. .. ..(level 0)
+ * 
+*/
+void print_indentor(int level)
+{
+  int n = 3;
+  do {
+    printf("%s", " ..");
+    n--;
+  } while((n-level) > 0);
+}
+
+// Recursively print the contents of a page table.
+void
+vmprint(pagetable_t pagetable, int level)
+{
+  // there are 2^9 = 512 PTEs in a page  while (level++ <
+  for(int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R | PTE_W | PTE_X)) == 0) {
+      uint64 child = PTE2PA(pte);
+      print_indentor(level);
+      printf("%d: pte %p pa %p\n", i, pte, child);
+      vmprint((pagetable_t)child, level -1);
+    } else if(pte & PTE_V) {
+      print_indentor(level);
+      printf("%d: pte %p pa %p\n", i, pte, PTE2PA(pte));
+    }
+  }
+}
+
+
+// Recusively get the Access flag of page tables used by veriable
+// whose starting adddress is va and lenght is size
+// pass first page table because the first page table maybe contains other
+// variables and the access flag could be changed by them. 
+int pgaccess(pagetable_t pagetable, uint64 va, uint64 size, uint64 uaddr)
+{
+  uint64 a, last;
+  pte_t *pte;
+  int i = 1;   //pass first page table
+  uint64 bitmask = 0;
+  
+  if(size == 0)
+    panic("pgaccess: size");
+  //a = PGROUNDDOWN(va);
+  a = PGROUNDUP(va); // pass first page table
+  last = PGROUNDDOWN(va + size - 1);
+  //printf("begin: %p, end: %p\n", a, last);
+  for(;;){
+    if((pte = walk(pagetable, a, 0)) == 0)
+      return -1;
+    if(*pte & PTE_A)
+      bitmask |= (1L << i);
+    else
+      *pte &= ~(PTE_A);
+
+    if(a == last)
+      break;
+    a += PGSIZE;
+    i++;
+  }
+  //printf("bit mask: %d\n", bitmask);
+  if(copyout(pagetable, uaddr, (char *)&bitmask, sizeof(bitmask)) < 0)
+    return -1;
+  
+  return 0;
+}
+#endif

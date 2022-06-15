@@ -81,6 +81,23 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  uint64 base, mask;
+  int n;
+  uint64 sz;
+  struct proc *p = myproc();
+
+  if(argaddr(0, &base) < 0)
+    return -1;
+  if(argint(1, &n) < 0)
+    return -1;
+  if(argaddr(2, &mask) < 0)
+    return -1;
+
+  sz = n * PGSIZE;
+  // vmprint(p->pagetable, 2);
+  if(pgaccess(p->pagetable, base, sz, mask) < 0)
+    return -1;
+  
   return 0;
 }
 #endif
