@@ -77,8 +77,42 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if (which_dev == 2){
+    if (p->interval > 0){
+      if (p->expire_ticks == p->interval){
+        /* printf("trap.c:\n"); */
+        /* printf("ra:%x,fp:%x,s1:%x,s2:%x,s3:%x,s4:%x,s5:%x,sp:%x,pc:%x\n", */
+        /*        p->trapframe->ra, */
+        /*        p->trapframe->s0, */
+        /*        p->trapframe->s1, */
+        /*        p->trapframe->s2, */
+        /*        p->trapframe->s3, */
+        /*        p->trapframe->s4, */
+        /*        p->trapframe->s5, */
+        /*        p->trapframe->sp, */
+        /*        p->trapframe->epc); */
+        p->usp = p->trapframe->sp;
+        p->uepc = r_sepc();
+        p->ufp = p->trapframe->s0;
+        p->us1 = p->trapframe->s1;
+        p->us2 = p->trapframe->s2;
+        p->us3 = p->trapframe->s3;
+        p->us4 = p->trapframe->s4;
+        p->us5 = p->trapframe->s5;
+        p->us6 = p->trapframe->s6;
+        p->us7 = p->trapframe->s7;
+        p->ura = p->trapframe->ra;
+        p->ua0 = p->trapframe->a0;
+        p->ua1 = p->trapframe->a1;
+        p->ua2 = p->trapframe->a2;
+        p->ua3 = p->trapframe->a3;
+        p->ua4 = p->trapframe->a4;
+        p->trapframe->epc = p->handler;
+      }
+      p->expire_ticks++;
+    }
     yield();
+  }
 
   usertrapret();
 }

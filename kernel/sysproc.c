@@ -70,6 +70,7 @@ sys_sleep(void)
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+  backtrace();
   return 0;
 }
 
@@ -94,4 +95,76 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_sigalarm(void)
+{
+  int interval;
+  uint64 fn;
+
+  if(argint(0, &interval) < 0)
+    return -1;
+  if(argaddr(1, &fn) < 0)
+    return -1;
+
+  //printf("interval = %d\n", interval);
+  //printf("fn address: %p\n", fn);
+  struct proc *p = myproc();
+    /* printf("sigalarm:\n"); */
+    /* printf("ra:%x,fp:%x,s1:%x,s2:%x,s3:%x,s4:%x,s5:%x,sp:%x,pc:%x\n", */
+    /*      p->trapframe->ra, */
+    /*      p->trapframe->s0, */
+    /*      p->trapframe->s1, */
+    /*      p->trapframe->s2, */
+    /*      p->trapframe->s3, */
+    /*      p->trapframe->s4, */
+    /*      p->trapframe->s5, */
+    /*      p->trapframe->sp, */
+    /*      p->trapframe->epc); */
+  p->interval = interval;
+  p->expire_ticks = 0;
+  p->handler = fn;
+
+  //printf("ra=%p\n", p->trapframe->ra);
+  
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+  /* printf("sigreturn:\n"); */
+  /* printf("ra:%x,fp:%x,s1:%x,s2:%x,s3:%x,s4:%x,s5:%x,sp:%x,pc:%x\n", */
+  /*        p->trapframe->ra, */
+  /*        p->trapframe->s0, */
+  /*        p->trapframe->s1, */
+  /*        p->trapframe->s2, */
+  /*        p->trapframe->s3, */
+  /*        p->trapframe->s4, */
+  /*        p->trapframe->s5, */
+  /*        p->trapframe->sp, */
+  /*        p->trapframe->epc); */
+  p->trapframe->epc = p->uepc;
+  p->trapframe->sp = p->usp;
+  p->trapframe->s0 = p->ufp;
+  p->trapframe->s1 = p->us1;
+  p->trapframe->s2 = p->us2;
+  p->trapframe->s3 = p->us3;
+  p->trapframe->s4 = p->us4;
+  p->trapframe->s5 = p->us5;
+  p->trapframe->s6 = p->us6;
+  p->trapframe->s7 = p->us7;
+  p->trapframe->ra = p->ura;
+  p->trapframe->a0 = p->ua0;
+  p->trapframe->a1 = p->ua1;
+  p->trapframe->a2 = p->ua2;
+  p->trapframe->a3 = p->ua3;
+  p->trapframe->a4 = p->ua4;
+  p->expire_ticks = 0;
+
+  //printf("sigreturn: ra=%p\n", p->trapframe->ra);
+  
+  return 0;
 }

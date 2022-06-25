@@ -79,7 +79,6 @@ struct trapframe {
   /* 272 */ uint64 t5;
   /* 280 */ uint64 t6;
 };
-
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -93,6 +92,16 @@ struct proc {
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
 
+  uint64 interval;  //alarm interval
+  uint64 expire_ticks;  // expire ticks
+  uint64 uepc;  //save user caller  pc before set pc to handler address.
+  uint64 usp;
+  uint64 ufp;
+  uint64 ura;
+  uint64 us1, us2, us3, us4, us5, us6, us7;
+  uint64 ua0, ua1, ua2, ua3, ua4;
+  uint64 handler;  // alarm handler.
+  
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
 

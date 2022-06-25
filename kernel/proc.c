@@ -141,6 +141,26 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->interval = 0;
+  p->expire_ticks = 0;
+  p->handler = 0;
+  p->uepc= 0;
+  p->usp = 0;
+  p->us1 = 0;
+  p->us2 = 0;
+  p->us3 = 0;
+  p->us4 = 0;
+  p->us5 = 0;
+  p->us6 = 0;
+  p->us7 = 0;
+  p->ufp = 0;
+  p->ura = 0;
+  p->ua0 = 0;
+  p->ua1 = 0;
+  p->ua2 = 0;
+  p->ua3 = 0;
+  p->ua4 = 0;
+  
   return p;
 }
 
@@ -163,6 +183,25 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->interval = 0;
+  p->expire_ticks = 0;
+  p->uepc = 0;
+  p->usp = 0;
+  p->us1 = 0;
+  p->us2 = 0;
+  p->us3 = 0;
+  p->us4 = 0;
+  p->us5 = 0;
+  p->us6 = 0;
+  p->us7 = 0;
+  p->handler = 0;
+  p->ufp = 0;
+  p->ura = 0;
+  p->ua0 = 0;
+  p->ua1 = 0;
+  p->ua2 = 0;
+  p->ua3 = 0;
+  p->ua4 = 0;
   p->state = UNUSED;
 }
 
