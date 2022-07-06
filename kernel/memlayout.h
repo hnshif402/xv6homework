@@ -65,3 +65,14 @@
 //   TRAPFRAME (p->trapframe, used by the trampoline)
 //   TRAMPOLINE (the same page as in the kernel)
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
+
+
+#define pa_to_pfn(pa) ((pa - KERNBASE) >> 12)
+#define pfn_to_pa(pfn) (KERNBASE + (pfn << PGSHIFT))
+
+#define MAXPFN pa_to_pfn(PHYSTOP)
+
+struct page {
+  /* struct spinlock lock; */
+  int count;                    /* reference counter */
+};

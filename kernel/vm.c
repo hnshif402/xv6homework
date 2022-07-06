@@ -15,6 +15,8 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+extern struct page page_map[MAXPFN];
+
 // Make a direct-map page table for the kernel.
 pagetable_t
 kvmmake(void)
@@ -105,6 +107,8 @@ walkaddr(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
   uint64 pa;
+  uint flags;
+  char *mem;
 
   if(va >= MAXVA)
     return 0;
@@ -117,6 +121,25 @@ walkaddr(pagetable_t pagetable, uint64 va)
   if((*pte & PTE_U) == 0)
     return 0;
   pa = PTE2PA(*pte);
+
+  if(*pte & PTE_COW){
+    flags = PTE_FLAGS(*pte);
+    flags |= PTE_W;
+    if((mem = kalloc()) == 0){
+      printf("walkaddr(): kalloc failed.\n");
+      return 0;
+    }
+    memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
+      kfree(mem);
+      exit(-1);
+    }
+    if(--page_map[pa_to_pfn(pa)].count == 0)
+      kfree((void*)pa);
+
+    return (uint64)mem;
+  }
+  /* pa = PTE2PA(*pte); */
   return pa;
 }
 
@@ -180,7 +203,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not a leaf");
     if(do_free){
       uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+      if(--page_map[pa_to_pfn(pa)].count == 0)
+        kfree((void*)pa);
     }
     *pte = 0;
   }
@@ -303,27 +327,34 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
-
+  /* char *mem; */
+  
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    page_map[pa_to_pfn(pa)].count += 1;
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    *pte = (*pte) & ~PTE_W;
+    *pte = (*pte) | PTE_COW;
+
+    flags = flags & ~PTE_W;
+    flags = flags | PTE_COW;
+    /* if((mem = kalloc()) == 0) */
+    /*   goto err; */
+    /* memmove(mem, (char*)pa, PGSIZE); */
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      /* kfree(mem); */
       goto err;
     }
   }
   return 0;
 
  err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
+  /* uvmunmap(new, 0, i / PGSIZE, 1); */
+  uvmunmap(new, 0, i / PGSIZE, 0);
   return -1;
 }
 

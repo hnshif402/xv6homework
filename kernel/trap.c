@@ -10,7 +10,7 @@ struct spinlock tickslock;
 uint ticks;
 
 extern char trampoline[], uservec[], userret[];
-
+extern struct page page_map[MAXPFN];
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
 
@@ -37,6 +37,11 @@ void
 usertrap(void)
 {
   int which_dev = 0;
+  char *mem;
+  uint64 va;
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
@@ -65,6 +70,33 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if (r_scause() == 13){
+    /* handle load page fault */
+    va = r_stval();
+    if((pte = walk(p->pagetable, va, 0)) == 0){
+      printf("usertrap(): walk failed: %p\n", va);
+      exit(-1);
+    }
+    if(*pte & PTE_COW) {
+      pa = PTE2PA(*pte);
+      flags = PTE_FLAGS(*pte);
+      flags |= PTE_W;
+      /* flags &= ~PTE_COW; */
+
+      if((mem = kalloc()) == 0) {
+        printf("usertrap: kalloc failed.\n");
+        exit(-1);
+      }
+      memmove(mem, (char*)pa, PGSIZE);
+      if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
+        kfree(mem);
+        exit(-1);
+      }
+      if(--page_map[pa_to_pfn(pa)].count == 0){
+        kfree((void*)pa);
+      }
+      
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
