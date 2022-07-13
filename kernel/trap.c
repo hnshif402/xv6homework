@@ -38,7 +38,7 @@ usertrap(void)
 {
   int which_dev = 0;
   char *mem;
-  uint64 va;
+  uint64 va0;
   pte_t *pte;
   uint64 pa;
   uint flags;
@@ -70,17 +70,20 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if (r_scause() == 13){
+  } else if (r_scause() == 13 || r_scause() == 15){
     /* handle load page fault */
-    va = r_stval();
-    if((pte = walk(p->pagetable, va, 0)) == 0){
-      printf("usertrap(): walk failed: %p\n", va);
+    if(r_stval() >= MAXVA)
+      exit(-1);
+    va0 = PGROUNDDOWN(r_stval());
+    if((pte = walk(p->pagetable, va0, 0)) == 0){
+      printf("usertrap(): walk failed: %p\n", va0);
       exit(-1);
     }
     if(*pte & PTE_COW) {
       pa = PTE2PA(*pte);
       flags = PTE_FLAGS(*pte);
       flags |= PTE_W;
+      flags &= ~PTE_COW;
       /* flags &= ~PTE_COW; */
 
       if((mem = kalloc()) == 0) {
@@ -88,11 +91,12 @@ usertrap(void)
         exit(-1);
       }
       memmove(mem, (char*)pa, PGSIZE);
-      if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
+      if(mappages(p->pagetable, va0, PGSIZE, (uint64)mem, flags) != 0) {
         kfree(mem);
         exit(-1);
       }
-      if(--page_map[pa_to_pfn(pa)].count == 0){
+      page_map[pa_to_pfn(pa)].count -= 1;
+      if(page_map[pa_to_pfn(pa)].count == 0){
         kfree((void*)pa);
       }
       

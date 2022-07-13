@@ -107,8 +107,6 @@ walkaddr(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
   uint64 pa;
-  uint flags;
-  char *mem;
 
   if(va >= MAXVA)
     return 0;
@@ -120,26 +118,8 @@ walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
   if((*pte & PTE_U) == 0)
     return 0;
+  
   pa = PTE2PA(*pte);
-
-  if(*pte & PTE_COW){
-    flags = PTE_FLAGS(*pte);
-    flags |= PTE_W;
-    if((mem = kalloc()) == 0){
-      printf("walkaddr(): kalloc failed.\n");
-      return 0;
-    }
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      exit(-1);
-    }
-    if(--page_map[pa_to_pfn(pa)].count == 0)
-      kfree((void*)pa);
-
-    return (uint64)mem;
-  }
-  /* pa = PTE2PA(*pte); */
   return pa;
 }
 
@@ -171,7 +151,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
+    if((*pte & PTE_V) & (*pte & PTE_W))
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
@@ -201,9 +181,10 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
+    uint64 pa = PTE2PA(*pte);
+    page_map[pa_to_pfn(pa)].count -= 1;
     if(do_free){
-      uint64 pa = PTE2PA(*pte);
-      if(--page_map[pa_to_pfn(pa)].count == 0)
+      if(page_map[pa_to_pfn(pa)].count == 0)
         kfree((void*)pa);
     }
     *pte = 0;
@@ -378,10 +359,43 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  pte_t *pte;
+  char *mem;
+  uint flags;
+
+  if(dstva >= MAXVA)
+    return -1;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
+    /* pa0 = walkaddr(pagetable, va0);  */
+
+    /* begin of cow */
+    if((pte = walk(pagetable, va0, 0)) == 0){
+      printf("copycout(): walk failed.\n");
+      return -1;
+    }
+    pa0 = PTE2PA(*pte);
+    if(*pte & PTE_COW){
+      flags = PTE_FLAGS(*pte);
+      flags |= PTE_W;
+      flags &= ~PTE_COW;
+      if((mem = kalloc()) == 0){
+        printf("walkaddr(): kalloc failed.\n");
+        return 0;
+      }
+      memmove(mem, (char*)pa0, PGSIZE);
+      if(mappages(pagetable, va0, PGSIZE, (uint64)mem, flags) != 0){
+        kfree(mem);
+        exit(-1);
+      }
+      page_map[pa_to_pfn(pa0)].count -= 1;
+      if(page_map[pa_to_pfn(pa0)].count == 0)
+        kfree((void*)pa0);
+
+      pa0 = (uint64)mem;
+    }
+    /* end of cow */
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

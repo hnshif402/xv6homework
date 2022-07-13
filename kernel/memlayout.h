@@ -73,6 +73,6 @@
 #define MAXPFN pa_to_pfn(PHYSTOP)
 
 struct page {
-  /* struct spinlock lock; */
+  //struct spinlock lock;         /* lock for count */
   int count;                    /* reference counter */
 };
