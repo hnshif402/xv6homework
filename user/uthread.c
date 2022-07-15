@@ -12,16 +12,29 @@
 
 
 struct thread {
+  uint64 ra;                    /* return address */
+  uint64 sp;                    /* stack pointer */
+  uint64 s[12];                 /* callee saved registers */
   char       stack[STACK_SIZE]; /* the thread's stack */
   int        state;             /* FREE, RUNNING, RUNNABLE */
 };
 struct thread all_thread[MAX_THREAD];
 struct thread *current_thread;
 extern void thread_switch(uint64, uint64);
+void thread_yield(void);
               
 void 
 thread_init(void)
 {
+  struct thread *t;
+  for(int i = 0; i < MAX_THREAD; i++){
+    t = &all_thread[i];
+    t->ra = 0;
+    t->sp = (uint64)&(t->stack) + sizeof(t->stack);
+    t->state = FREE;
+    memset(t->s, '\0', sizeof(uint64) * 12);
+    memset(t->stack, '\0', sizeof(char) * STACK_SIZE);
+  }
   // main() is thread 0, which will make the first invocation to
   // thread_schedule().  it needs a stack so that the first thread_switch() can
   // save thread 0's state.  thread_schedule() won't run the main thread ever
@@ -29,6 +42,7 @@ thread_init(void)
   // a RUNNABLE thread.
   current_thread = &all_thread[0];
   current_thread->state = RUNNING;
+  thread_yield();
 }
 
 void 
@@ -62,6 +76,7 @@ thread_schedule(void)
      * Invoke thread_switch to switch from t to next_thread:
      * thread_switch(??, ??);
      */
+    thread_switch((uint64)t, (uint64)current_thread);
   } else
     next_thread = 0;
 }
@@ -76,6 +91,8 @@ thread_create(void (*func)())
   }
   t->state = RUNNABLE;
   // YOUR CODE HERE
+  t->ra = (uint64)func;
+  thread_yield();
 }
 
 void 
