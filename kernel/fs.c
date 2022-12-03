@@ -437,44 +437,53 @@ itrunc(struct inode *ip)
   uint *a, *b, *c;
 
   for(i = 0; i < NDIRECT; i++){
-    if(ip->addrs[i]){
-      bfree(ip->dev, ip->addrs[i]);
+    if(ip->size == 0 && ip->type == T_SYMLINK) {  // ip->size == 0 means symlink target are stored in ip->addrs.
       ip->addrs[i] = 0;
-    }
-  }
-
-  if(ip->addrs[NDIRECT]){
-    bp = bread(ip->dev, ip->addrs[NDIRECT]);
-    a = (uint*)bp->data;
-    for(j = 0; j < NINDIRECT; j++){
-      if(a[j])
-        bfree(ip->dev, a[j]);
-    }
-    brelse(bp);
-    bfree(ip->dev, ip->addrs[NDIRECT]);
-    ip->addrs[NDIRECT] = 0;
-  }
-
-  // truncate doubly-indirect blocks
-  if(ip->addrs[NDIRECT+1]) {
-    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
-    b = (uint*)bp->data;
-    for(k = 0; k < NINDIRECT; k++) {
-      if(b[k]) {
-        bp1 = bread(ip->dev, b[k]);
-        c = (uint*)bp1->data;
-        for(l = 0; l < NINDIRECT; l++) {
-          if(c[l])
-            bfree(ip->dev, c[l]);
-        }
-        brelse(bp1);
-        bfree(ip->dev, b[k]);
-        b[k] = 0;
+    } else {
+      if(ip->addrs[i]){
+        bfree(ip->dev, ip->addrs[i]);
+        ip->addrs[i] = 0;
       }
     }
-    brelse(bp);
-    bfree(ip->dev, ip->addrs[NINDIRECT+1]);
-    ip->addrs[NINDIRECT+1] = 0;
+  }
+
+  if(ip->type == T_SYMLINK) {
+    ip->addrs[NDIRECT] = 0;
+    ip->addrs[NDIRECT+1] = 0;
+  } else {
+    if(ip->addrs[NDIRECT]){
+      bp = bread(ip->dev, ip->addrs[NDIRECT]);
+      a = (uint*)bp->data;
+      for(j = 0; j < NINDIRECT; j++){
+        if(a[j])
+          bfree(ip->dev, a[j]);
+      }
+      brelse(bp);
+      bfree(ip->dev, ip->addrs[NDIRECT]);
+      ip->addrs[NDIRECT] = 0;
+    }
+
+  // truncate doubly-indirect blocks
+    if(ip->addrs[NDIRECT+1]) {
+      bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+      b = (uint*)bp->data;
+      for(k = 0; k < NINDIRECT; k++) {
+        if(b[k]) {
+          bp1 = bread(ip->dev, b[k]);
+          c = (uint*)bp1->data;
+          for(l = 0; l < NINDIRECT; l++) {
+            if(c[l])
+              bfree(ip->dev, c[l]);
+          }
+          brelse(bp1);
+          bfree(ip->dev, b[k]);
+          b[k] = 0;
+        }
+      }
+      brelse(bp);
+      bfree(ip->dev, ip->addrs[NINDIRECT+1]);
+      ip->addrs[NINDIRECT+1] = 0;
+    }
   }
 
   ip->size = 0;

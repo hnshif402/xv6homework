@@ -49,6 +49,7 @@ stat_slink(char *pn, struct stat *st)
     return -1;
   if(fstat(fd, st) != 0)
     return -1;
+
   return 0;
 }
 
@@ -70,7 +71,6 @@ testsymlink(void)
   r = symlink("/testsymlink/a", "/testsymlink/b");
   if(r < 0)
     fail("symlink b -> a failed");
-
   if(write(fd1, buf, sizeof(buf)) != 4)
     fail("failed to write to a");
 
@@ -78,22 +78,18 @@ testsymlink(void)
     fail("failed to stat b");
   if(st.type != T_SYMLINK)
     fail("b isn't a symlink");
-
   fd2 = open("/testsymlink/b", O_RDWR);
   if(fd2 < 0)
     fail("failed to open b");
   read(fd2, &c, 1);
   if (c != 'a')
     fail("failed to read bytes from b");
-
   unlink("/testsymlink/a");
   if(open("/testsymlink/b", O_RDWR) >= 0)
     fail("Should not be able to open b after deleting a");
-
   r = symlink("/testsymlink/b", "/testsymlink/a");
   if(r < 0)
     fail("symlink a -> b failed");
-
   r = open("/testsymlink/b", O_RDWR);
   if(r >= 0)
     fail("Should not be able to open b (cycle b->a->b->..)\n");
@@ -108,7 +104,6 @@ testsymlink(void)
   if(r) fail("Failed to link 2->3");
   r = symlink("/testsymlink/4", "/testsymlink/3");
   if(r) fail("Failed to link 3->4");
-
   close(fd1);
   close(fd2);
 
@@ -116,7 +111,6 @@ testsymlink(void)
   if(fd1<0) fail("Failed to create 4\n");
   fd2 = open("/testsymlink/1", O_RDWR);
   if(fd2<0) fail("Failed to open 1\n");
-
   c = '#';
   r = write(fd2, &c, 1);
   if(r!=1) fail("Failed to write to 1\n");
@@ -139,7 +133,6 @@ concur(void)
   struct stat st;
   int nchild = 2;
 
-  printf("Start: test concurrent symlinks\n");
     
   fd = open("/testsymlink/z", O_CREATE | O_RDWR);
   if(fd < 0) {

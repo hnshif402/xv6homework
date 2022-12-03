@@ -207,7 +207,6 @@ sys_unlink(void)
   if((ip = dirlookup(dp, name, &off)) == 0)
     goto bad;
   ilock(ip);
-
   if(ip->nlink < 1)
     panic("unlink: nlink < 1");
   if(ip->type == T_DIR && !isdirempty(ip)){
@@ -223,7 +222,6 @@ sys_unlink(void)
     iupdate(dp);
   }
   iunlockput(dp);
-
   ip->nlink--;
   iupdate(ip);
   iunlockput(ip);
@@ -290,7 +288,8 @@ sys_open(void)
   int fd, omode;
   struct file *f;
   struct inode *ip;
-  int n;
+  int n, cycle;
+  char *s, *t;
 
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
@@ -313,6 +312,34 @@ sys_open(void)
       iunlockput(ip);
       end_op();
       return -1;
+    }
+
+    // T_SYMLINK
+    cycle = 0;
+    /* open symbolic link with follow */
+    while(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)) {
+      if(cycle++ > 10) {   // failed to open it when it forms cycle and reach the max cycle value.
+        printf("open: sysbolic link reaches max cycle: %d\n", cycle);
+        iunlockput(ip);
+        return -1;
+      }
+      if(ip->size == 0) {       /* the size == 0 means the length of target name is less then 52 bytes, ip->addrs[] contains the target name  */
+        s = (char*)ip->addrs;
+        t = path;
+        while((*t++ = *s++) != 0)
+          ;
+      } else {                  /* the target name are stored in one block, not in ip->addrs[] */
+        if((readi(ip, 0, (uint64)path, 0, MAXPATH)) < 0)
+          panic("open: readi");
+      }
+      iunlockput(ip);
+      if((ip = namei(path)) == 0) {
+        printf("sys_symlink: Not found '%s'\n", path);
+        //iput(ip);
+        end_op();
+        return -1;
+      }
+      ilock(ip);
     }
   }
 
@@ -482,5 +509,74 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+/* create the new path as a soft link which contains the target name. */
+/* if the length of target name is less then 52 bytes,sizeof(ip->addrs), then store target name to ip->addrs */
+/* if the length is bigger, then alloc one block to store target name. */
+/* so if the length is bigger then 4*13=52 byte, the size in inode referenced to symblic link is 1, othewise 0.  */
+uint64
+sys_symlink(void)
+{
+  char name[DIRSIZ], path[MAXPATH], target[MAXPATH];
+
+  struct inode *ip, *dp;
+  char *s, *t;
+
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  begin_op();
+  if((dp = nameiparent(path, name)) == 0){
+    end_op();
+    return -1;
+  }
+
+  ilock(dp);
+  if((ip = dirlookup(dp, name, 0)) != 0) {
+    iunlockput(dp);
+    iput(ip);
+    printf("failed to create symbolic link '%s': File exists\n", name);
+    end_op();
+    return -1;
+  }
+  if((ip = ialloc(dp->dev, T_SYMLINK)) == 0)
+    panic("sys_symlink: ialloc");
+
+  ilock(ip);
+  ip->major = dp->major;
+  ip->minor = dp->minor;
+  //ip->type = T_SYMLINK;
+  ip->nlink = 1;
+
+  /* check the length of target name */
+  if(strlen(target) > (NINDIRECT+2) * sizeof(uint)) {
+    /* the length is bigger than 4*13 = 52 bytes, allock one block to store then target name */
+    ip->size = 1;
+    if(writei(ip, 0, (uint64)target, 0, strlen(target)) != strlen(target))
+       panic("sys_symlink: writei");
+  } else {
+    /* the length is less then 52 bytes, store target name to ip->addrs[] */
+    s = target;
+    t = (char*)ip->addrs;
+    while((*t++ = *s++) != 0)
+      ;
+    ip->size = 0;
+  }
+  iupdate(ip);
+  iunlock(ip);
+
+  if(dirlink(dp, name, ip->inum) < 0) {
+    iunlockput(dp);
+    end_op();
+    return -1;
+  }
+  dp->nlink++;
+  iupdate(dp);
+  iunlockput(dp);
+  iput(ip);
+  
+  end_op();
   return 0;
 }
